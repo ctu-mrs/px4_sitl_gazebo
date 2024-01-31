@@ -17,6 +17,8 @@
 /*
  * Desc: Contact plugin
  * Author: Nate Koenig mod by John Hsu
+ *
+ * Adapted by Petr Štibinger (stibipet@fel.cvut.cz)
  */
 
 #include "gazebo_lidar_plugin.h"
@@ -29,6 +31,7 @@
 #include <boost/algorithm/string.hpp>
 #include <common.h>
 #include <ignition/math/Rand.hh>
+#include <tf2/LinearMath/Quaternion.h>
 
 using namespace gazebo;
 using namespace std;
@@ -74,24 +77,24 @@ void LidarPlugin::Load(sensors::SensorPtr _parent, sdf::ElementPtr _sdf)
     simulate_fog_ = false;
   }
   // get minimum distance
-  if (_sdf->HasElement("min_distance")) {
-    min_distance_ = _sdf->GetElement("min_distance")->Get<double>();
+  if (_sdf->HasElement("minDistance")) {
+    min_distance_ = _sdf->GetElement("minDistance")->Get<double>();
     if (min_distance_ < kSensorMinDistance) {
       min_distance_ = kSensorMinDistance;
     }
   } else {
-    gzwarn << "[gazebo_lidar_plugin] Using default minimum distance: " << kDefaultMinDistance << "\n";
+    gzwarn << "[gazebo_lidar_plugin]: Missing param 'minDistance', defaulting to " << kDefaultMinDistance << "\n";
     min_distance_ = kDefaultMinDistance;
   }
 
   // get maximum distance
-  if (_sdf->HasElement("max_distance")) {
-    max_distance_ = _sdf->GetElement("max_distance")->Get<double>();
+  if (_sdf->HasElement("maxDistance")) {
+    max_distance_ = _sdf->GetElement("maxDistance")->Get<double>();
     if (max_distance_ > kSensorMaxDistance) {
       max_distance_ = kSensorMaxDistance;
     }
   } else {
-    gzwarn << "[gazebo_lidar_plugin] Using default maximum distance: " << kDefaultMaxDistance << "\n";
+    gzwarn << "[gazebo_lidar_plugin]: Missing param 'maxDistance', defaulting to " << kDefaultMaxDistance << "\n";
     max_distance_ = kDefaultMaxDistance;
   }
 
@@ -118,12 +121,68 @@ void LidarPlugin::Load(sensors::SensorPtr _parent, sdf::ElementPtr _sdf)
 
   // get lidar topic name
   if(_sdf->HasElement("topic")) {
-    lidar_topic_ = parentSensor_->Topic();
+    lidar_topic_ = _sdf->GetElement("topic")->Get<std::string>();
   } else {
     // if not set by parameter, get the topic name from the model name
     lidar_topic_ = parentSensorModelName;
     gzwarn << "[gazebo_lidar_plugin]: " + names_splitted.front() + "::" + names_splitted.rbegin()[1] +
       " using lidar topic \"" << parentSensorModelName << "\"\n";
+  }
+
+  if (_sdf->HasElement("x")){
+    x_ = _sdf->GetElement("x")->Get<double>();
+  } else {
+    gzwarn << "[gazebo_lidar_plugin]: Missing param 'x', defaulting to 0" << std::endl;
+    x_ = 0;
+  }
+
+  if (_sdf->HasElement("y")){
+    y_ = _sdf->GetElement("y")->Get<double>();
+  } else {
+    gzwarn << "[gazebo_lidar_plugin]: Missing param 'y', defaulting to 0" << std::endl;
+    y_ = 0;
+  }
+
+  if (_sdf->HasElement("z")){
+    z_ = _sdf->GetElement("z")->Get<double>();
+  } else {
+    gzwarn << "[gazebo_lidar_plugin]: Missing param 'z', defaulting to 0" << std::endl;
+    z_ = 0;
+  }
+
+  if (_sdf->HasElement("roll")){
+    roll_ = _sdf->GetElement("roll")->Get<double>();
+  } else {
+    gzwarn << "[gazebo_lidar_plugin]: Missing param 'roll', defaulting to 0" << std::endl;
+    roll_ = 0;
+  }
+
+  if (_sdf->HasElement("pitch")){
+    pitch_ = _sdf->GetElement("pitch")->Get<double>();
+  } else {
+    gzwarn << "[gazebo_lidar_plugin]: Missing param 'pitch', defaulting to 0" << std::endl;
+    pitch_ = 0;
+  }
+
+  if (_sdf->HasElement("yaw")){
+    yaw_ = _sdf->GetElement("yaw")->Get<double>();
+  } else {
+    gzwarn << "[gazebo_lidar_plugin]: Missing param 'yaw', defaulting to 0" << std::endl;
+    yaw_ = 0;
+  }
+
+  if (_sdf->HasElement("parentFrameName")){
+    parent_frame_name_ = _sdf->GetElement("parentFrameName")->Get<std::string>();
+  } else {
+    gzwarn << "[gazebo_lidar_plugin]: Missing param 'parentFrameName', defaulting to 'world'" << std::endl;
+    parent_frame_name_ = "world";
+  }
+
+  if (_sdf->HasElement("frameName")){
+    frame_name_ = _sdf->GetElement("frameName")->Get<std::string>();
+  } else {
+    gzwarn << "[gazebo_lidar_plugin]: Missing param 'frame_name', defaulting to 'sensor'" << std::endl;
+    frame_name_ = "sensor";
   }
 
   // Calculate parent sensor rotation WRT `base_link`
@@ -134,6 +193,12 @@ void LidarPlugin::Load(sensors::SensorPtr _parent, sdf::ElementPtr _sdf)
   orientation_.set_y(q_ls.Y());
   orientation_.set_z(q_ls.Z());
   orientation_.set_w(q_ls.W());
+
+  rosnode_ = new ros::NodeHandle(namespace_);
+  tf_pub_ = rosnode_->advertise<tf2_msgs::TFMessage>("/tf_gazebo_static", 100, true);
+  createStaticTransforms();
+  timer_ = rosnode_->createWallTimer(ros::WallDuration(1.0), &LidarPlugin::publishStaticTransforms, this);
+
 
   // start lidar topic publishing
   lidar_pub_ = node_handle_->Advertise<sensor_msgs::msgs::Range>("~/" + names_splitted[0] + "/link/" + lidar_topic_, 10);
@@ -188,4 +253,30 @@ void LidarPlugin::OnNewLaserScans()
   lidar_message_.set_signal_quality(signal_quality);
 
   lidar_pub_->Publish(lidar_message_);
+}
+
+/////////////////////////////////////////////////
+void LidarPlugin::createStaticTransforms() {
+  geometry_msgs::TransformStamped static_transformStamped;
+
+  static_transformStamped.header.stamp            = ros::Time(0);
+  static_transformStamped.header.frame_id         = parent_frame_name_;
+  static_transformStamped.child_frame_id          = frame_name_;
+  static_transformStamped.transform.translation.x = x_;
+  static_transformStamped.transform.translation.y = y_;
+  static_transformStamped.transform.translation.z = z_;
+  tf2::Quaternion quat;
+  quat.setRPY(roll_, pitch_, yaw_);
+  static_transformStamped.transform.rotation.x = quat.x();
+  static_transformStamped.transform.rotation.y = quat.y();
+  static_transformStamped.transform.rotation.z = quat.z();
+  static_transformStamped.transform.rotation.w = quat.w();
+
+  this->tf_message_.transforms.push_back(static_transformStamped);
+  /* ROS_INFO_NAMED("2dlidar", "created"); */
+}
+
+/////////////////////////////////////////////////
+void LidarPlugin::publishStaticTransforms([[maybe_unused]] const ros::WallTimerEvent &event) {
+  this->tf_pub_.publish(this->tf_message_);
 }

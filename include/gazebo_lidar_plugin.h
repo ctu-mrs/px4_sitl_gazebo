@@ -22,6 +22,8 @@
 #ifndef _GAZEBO_LIDAR_PLUGIN_HH_
 #define _GAZEBO_LIDAR_PLUGIN_HH_
 
+#include <ros/ros.h>
+#include <tf2_msgs/TFMessage.h>
 #include <gazebo/gazebo.hh>
 #include <gazebo/common/common.hh>
 #include <gazebo/common/Plugin.hh>
@@ -76,13 +78,24 @@ namespace gazebo
       double low_signal_strength_;
       double high_signal_strength_;
       bool simulate_fog_;
-
       gazebo::msgs::Quaternion orientation_;
+
+      ros::NodeHandle *rosnode_;
+      ros::Publisher tf_pub_;
+      tf2_msgs::TFMessage tf_message_;
+      ros::WallTimer      timer_;
+
+      std::string frame_name_, parent_frame_name_;
+      double x_, y_, z_, roll_, pitch_, yaw_;
 
     /// \brief The connection tied to LidarPlugin::OnNewLaserScans()
     private:
       event::ConnectionPtr newLaserScansConnection_;
       sensor_msgs::msgs::Range lidar_message_;
+
+    private:
+      void createStaticTransforms();
+      void publishStaticTransforms(const ros::WallTimerEvent &event);
   };
 }
 #endif
