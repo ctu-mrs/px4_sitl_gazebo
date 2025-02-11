@@ -129,6 +129,14 @@ void GpsPlugin::Load(sensors::SensorPtr _parent, sdf::ElementPtr _sdf)
     lon_home_ = longitude * M_PI / 180.0;
   }
 
+  utm_zone_ = mrs_lib::UTMLetterDesignator(lat_home_ * 180.0 / M_PI);
+  gzmsg << "[gazebo_gps_plugin] UTM zone set to " << utm_zone_ << ".\n";
+
+  mrs_lib::LLtoUTM(lat_home_ * 180.0 / M_PI, lon_home_ * 180.0 / M_PI, world_utm_y_, world_utm_x_, &utm_zone_);
+
+  gzmsg << "[gazebo_gps_plugin] UTM origin X (eastling) set to " << world_utm_x_ << ".\n";
+  gzmsg << "[gazebo_gps_plugin] UTM origin Y (northling) set to " << world_utm_y_ << ".\n";
+
   if (env_alt) {
     alt_home_ = std::stod(env_alt);
     gzmsg << "[gazebo_gps_plugin] Home altitude is set to " << alt_home_ << ".\n";
@@ -289,7 +297,11 @@ void GpsPlugin::OnWorldUpdate(const common::UpdateInfo& /*_info*/)
 
   // reproject position with noise into geographic coordinates
   auto pos_with_noise = pos_W_I + noise_gps_pos_ + gps_bias_;
-  auto latlon = reproject(pos_with_noise, lat_home_, lon_home_, alt_home_);
+//  auto latlon = reproject(pos_with_noise, lat_home_, lon_home_, alt_home_);
+
+  double lat = 0.0, lon = 0.0;
+  mrs_lib::UTMtoLL(world_utm_y_+pos_with_noise.Y() , world_utm_x_+pos_with_noise.X(), &utm_zone_, lat, lon);
+  gzerr << "From y: " << world_utm_y_+pos_with_noise.Y() << ", x: " << world_utm_x_+pos_with_noise.X() << ", lat: " << lat << ", lon: " << lon << std::endl;
 
   // fill SITLGps msg
   sensor_msgs::msgs::SITLGps gps_msg;
@@ -302,8 +314,8 @@ void GpsPlugin::OnWorldUpdate(const common::UpdateInfo& /*_info*/)
   // gps_msg.set_latitude_deg(parentSensor_->Latitude().Degree());
   // gps_msg.set_longitude_deg(parentSensor_->Longitude().Degree());
   // gps_msg.set_altitude(parentSensor_->Altitude());
-  gps_msg.set_latitude_deg(latlon.first * 180.0 / M_PI);
-  gps_msg.set_longitude_deg(latlon.second * 180.0 / M_PI);
+  gps_msg.set_latitude_deg(lat);
+  gps_msg.set_longitude_deg(lon);
   gps_msg.set_altitude(pos_W_I.Z() + alt_home_ - noise_gps_pos_.Z() + gps_bias_.Z());
 
   std_xy_ = 1.0;
