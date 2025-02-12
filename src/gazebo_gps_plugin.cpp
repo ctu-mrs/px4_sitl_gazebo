@@ -129,11 +129,10 @@ void GpsPlugin::Load(sensors::SensorPtr _parent, sdf::ElementPtr _sdf)
     lon_home_ = longitude * M_PI / 180.0;
   }
 
-  utm_zone_ = mrs_lib::UTMLetterDesignator(lat_home_ * 180.0 / M_PI);
+  mrs_lib::LLtoUTM(lat_home_ * 180.0 / M_PI, lon_home_ * 180.0 / M_PI, world_utm_y_, world_utm_x_,
+                   reinterpret_cast<char *>(utm_zone_));
+
   gzmsg << "[gazebo_gps_plugin] UTM zone set to " << utm_zone_ << ".\n";
-
-  mrs_lib::LLtoUTM(lat_home_ * 180.0 / M_PI, lon_home_ * 180.0 / M_PI, world_utm_y_, world_utm_x_, &utm_zone_);
-
   gzmsg << "[gazebo_gps_plugin] UTM origin X (eastling) set to " << world_utm_x_ << ".\n";
   gzmsg << "[gazebo_gps_plugin] UTM origin Y (northling) set to " << world_utm_y_ << ".\n";
 
@@ -297,11 +296,10 @@ void GpsPlugin::OnWorldUpdate(const common::UpdateInfo& /*_info*/)
 
   // reproject position with noise into geographic coordinates
   auto pos_with_noise = pos_W_I + noise_gps_pos_ + gps_bias_;
-//  auto latlon = reproject(pos_with_noise, lat_home_, lon_home_, alt_home_);
 
   double lat = 0.0, lon = 0.0;
-  mrs_lib::UTMtoLL(world_utm_y_+pos_with_noise.Y() , world_utm_x_+pos_with_noise.X(), &utm_zone_, lat, lon);
-  gzerr << "From y: " << world_utm_y_+pos_with_noise.Y() << ", x: " << world_utm_x_+pos_with_noise.X() << ", lat: " << lat << ", lon: " << lon << std::endl;
+  mrs_lib::UTMtoLL(world_utm_y_+pos_with_noise.Y() , world_utm_x_+pos_with_noise.X(),
+                   reinterpret_cast<const char *>(utm_zone_), lat, lon);
 
   // fill SITLGps msg
   sensor_msgs::msgs::SITLGps gps_msg;
@@ -309,7 +307,7 @@ void GpsPlugin::OnWorldUpdate(const common::UpdateInfo& /*_info*/)
   gps_msg.set_time_usec(current_time.Double() * 1e6);
   gps_msg.set_time_utc_usec((current_time.Double() + start_time_.Double()) * 1e6);
 
-  // @note Unfurtonately the Gazebo GpsSensor seems to provide bad readings,
+  // @note Unfortunately the Gazebo GpsSensor seems to provide bad readings,
   // starting to drift and leading to global position loss
   // gps_msg.set_latitude_deg(parentSensor_->Latitude().Degree());
   // gps_msg.set_longitude_deg(parentSensor_->Longitude().Degree());

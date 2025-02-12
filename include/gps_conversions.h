@@ -200,7 +200,7 @@ namespace mrs_lib
     LongOriginRad = LongOrigin * RADIANS_PER_DEGREE;
 
     // compute the UTM Zone from the latitude and longitude
-//    snprintf(UTMZone, 4, "%d%c", ZoneNumber, UTMLetterDesignator(Lat));
+    snprintf(UTMZone, 4, "%d%c", ZoneNumber, UTMLetterDesignator(Lat));
 
     eccPrimeSquared = (eccSquared) / (1 - eccSquared);
 

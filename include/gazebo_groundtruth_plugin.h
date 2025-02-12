@@ -49,6 +49,7 @@
 
 #include <sdf/sdf.hh>
 #include <common.h>
+#include <gps_conversions.h>
 
 #include <gazebo/common/Plugin.hh>
 #include <gazebo/gazebo.hh>
@@ -91,6 +92,9 @@ private:
   double world_latitude_ = 0.0;
   double world_longitude_ = 0.0;
   double world_altitude_ = 0.0;
+  double world_utm_x_ = 0.0;
+  double world_utm_y_ = 0.0;
+  char* utm_zone_[4];
 
 };     // class GAZEBO_VISIBLE GroundtruthPlugin
 }      // namespace gazebo

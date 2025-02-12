@@ -111,7 +111,7 @@ private:
   double world_altitude_ = 0.0;
   double world_utm_x_ = 0.0;
   double world_utm_y_ = 0.0;
-  char utm_zone_ = 'U';
+  char* utm_zone_[4];
 
   // gps delay related
   static constexpr double gps_delay_ = 0.12;           // 120 ms

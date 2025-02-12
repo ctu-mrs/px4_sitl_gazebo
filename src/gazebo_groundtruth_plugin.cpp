@@ -93,6 +93,13 @@ void GroundtruthPlugin::Load(physics::ModelPtr _model, sdf::ElementPtr _sdf)
     lon_home_ = longitude * M_PI / 180.0;
   }
 
+  mrs_lib::LLtoUTM(lat_home_ * 180.0 / M_PI, lon_home_ * 180.0 / M_PI, world_utm_y_, world_utm_x_,
+                   reinterpret_cast<char *>(utm_zone_));
+
+  gzmsg << "[gazebo_groundtruth_plugin] UTM zone set to " << utm_zone_ << ".\n";
+  gzmsg << "[gazebo_groundtruth_plugin] UTM origin X (eastling) set to " << world_utm_x_ << ".\n";
+  gzmsg << "[gazebo_groundtruth_plugin] UTM origin Y (northling) set to " << world_utm_y_ << ".\n";
+
   if (env_alt) {
     alt_home_ = std::stod(env_alt);
     gzmsg << "[gazebo_groundtruth_plugin] Home altitude is set to " << alt_home_ << ".\n";
@@ -138,7 +145,11 @@ void GroundtruthPlugin::OnUpdate(const common::UpdateInfo&)
   ignition::math::Quaterniond& att_W_I = T_W_I.Rot();
 
   // reproject position into geographic coordinates
-  auto latlon_gt = reproject(pos_W_I, lat_home_, lon_home_, alt_home_);
+  double lat = 0.0, lon = 0.0;
+  mrs_lib::UTMtoLL(world_utm_y_+pos_W_I.Y() , world_utm_x_+pos_W_I.X(),
+                   reinterpret_cast<const char *>(utm_zone_), lat, lon);
+  lat = lat * M_PI / 180.0;
+  lon = lon * M_PI / 180.0;
 
   // Use the models' world position for groundtruth velocity.
 #if GAZEBO_MAJOR_VERSION >= 9
@@ -154,8 +165,8 @@ void GroundtruthPlugin::OnUpdate(const common::UpdateInfo&)
   sensor_msgs::msgs::Groundtruth groundtruth_msg;
 
   groundtruth_msg.set_time_usec(current_time.Double() * 1e6);
-  groundtruth_msg.set_latitude_rad(latlon_gt.first);
-  groundtruth_msg.set_longitude_rad(latlon_gt.second);
+  groundtruth_msg.set_latitude_rad(lat);
+  groundtruth_msg.set_longitude_rad(lon);
   groundtruth_msg.set_altitude(pos_W_I.Z() + alt_home_);
   groundtruth_msg.set_velocity_east(velocity_current_W.X());
   groundtruth_msg.set_velocity_north(velocity_current_W.Y());
