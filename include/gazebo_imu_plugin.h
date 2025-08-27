@@ -119,6 +119,7 @@ class GazeboImuPlugin : public ModelPlugin {
   std::string imu_topic_;
   transport::NodePtr node_handle_;
   transport::PublisherPtr imu_pub_;
+  transport::PublisherPtr imu_pub_2;
   std::string frame_id_;
   std::string link_name_;
 

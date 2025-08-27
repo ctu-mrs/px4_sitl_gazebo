@@ -27,6 +27,8 @@
 
 #include <boost/bind.hpp>
 
+#include <gazebo/msgs/imu.pb.h>
+
 namespace gazebo {
 
 GazeboImuPlugin::GazeboImuPlugin()
@@ -107,6 +109,7 @@ void GazeboImuPlugin::Load(physics::ModelPtr _model, sdf::ElementPtr _sdf) {
           boost::bind(&GazeboImuPlugin::OnUpdate, this, _1));
 
   imu_pub_ = node_handle_->Advertise<sensor_msgs::msgs::Imu>("~/" + model_->GetName() + imu_topic_, 10);
+  imu_pub_2 = node_handle_->Advertise<gazebo::msgs::IMU>("~/" + model_->GetName() + imu_topic_ + "_gazebo_msg" , 10);
 
   // Fill imu message.
   // imu_message_.header.frame_id = frame_id_; TODO Add header
@@ -322,7 +325,38 @@ void GazeboImuPlugin::OnUpdate(const common::UpdateInfo& _info) {
   imu_message_.set_allocated_linear_acceleration(linear_acceleration);
   imu_message_.set_allocated_angular_velocity(angular_velocity);
 
+  gazebo::msgs::IMU imu_sensor_msg;
+
+  gazebo::msgs::Vector3d* angular_velocity_tmp = new gazebo::msgs::Vector3d();
+  angular_velocity_tmp->set_x(angular_velocity_I[0]);
+  angular_velocity_tmp->set_y(angular_velocity_I[1]);
+  angular_velocity_tmp->set_z(angular_velocity_I[2]);
+  
+  gazebo::msgs::Vector3d* linear_acceleration_tmp = new gazebo::msgs::Vector3d();
+  linear_acceleration_tmp->set_x(linear_acceleration_I[0]);
+  linear_acceleration_tmp->set_y(linear_acceleration_I[1]);
+  linear_acceleration_tmp->set_z(linear_acceleration_I[2]);
+
+  std::string* imu_name = new std::string("new_imu");
+  imu_sensor_msg.set_allocated_entity_name(imu_name);
+
+  gazebo::msgs::Time* time_stamp = new gazebo::msgs::Time();
+  time_stamp->set_sec(_info.simTime.sec);
+  time_stamp->set_nsec(_info.simTime.nsec);
+  imu_sensor_msg.set_allocated_stamp(time_stamp);
+  
+  gazebo::msgs::Quaternion* orientation_tmp = new gazebo::msgs::Quaternion();
+  orientation_tmp->set_x(C_W_I.X());
+  orientation_tmp->set_y(C_W_I.Y());
+  orientation_tmp->set_z(C_W_I.Z());
+  orientation_tmp->set_w(C_W_I.W());
+  
+  imu_sensor_msg.set_allocated_angular_velocity(angular_velocity_tmp);
+  imu_sensor_msg.set_allocated_linear_acceleration(linear_acceleration_tmp);
+  imu_sensor_msg.set_allocated_orientation(orientation_tmp);
+  
   imu_pub_->Publish(imu_message_);
+  imu_pub_2->Publish(imu_sensor_msg);
 }
 
 
